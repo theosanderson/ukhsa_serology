@@ -12,15 +12,20 @@ library(tidyverse)
 library(scales)
 library(lubridate)
 library(viridisLite)
-data<-read_csv("combined.csv") %>% separate(month,into=c("month","year")) %>% mutate(date= lubridate::dmy(paste(15,month,year)))
+data<-read_csv("outputs/jan2023.csv") %>% separate(month,into=c("month","year")) %>% mutate(date= lubridate::dmy(paste(15,month,year)))
 
-old_data<-read_csv("old_data.csv") %>% separate(month,into=c("month","year")) %>% mutate(date= lubridate::dmy(paste(15,month,year)))
+old_data<-read_csv("outputs/early2022.csv") %>% separate(month,into=c("month","year")) %>% mutate(date= lubridate::dmy(paste(15,month,year)))
 nrow(old_data)
 old_data = filter(old_data,date<min(data$date))
+older_data<-read_csv("outputs/nov2021.csv") %>% separate(month,into=c("month","year")) %>% mutate(date= lubridate::dmy(paste(15,month,year)))
+older_data = filter(older_data,date<min(old_data$date)) %>% select(-`...1`)
 
-data = bind_rows(data,old_data)
+older_to_old = c("<0.8"="<0.8", "0.8-25"= "0.8-25" ,"25-250"="25-250","250-1000" ="250-2500","1000-2500" = "250-2500","2500-10000","10000+"="10000-25000")
+older_data = older_data %>% mutate(titre= older_to_old[titre]) %>% group_by(month,year,titre,age,N,date) %>% summarise(proportion=sum(proportion))
 
 
+
+data = bind_rows(data,old_data,older_data)
 
 levels = c("<0.8", "0.8-25","25-250","250-2500","2500-10000","10000-25000","25000+")
 colors = c('#e0e0e0', '#fff200', '#ffc90e', '#80cb58', '#15b4bb', '#0d77da', '#352a87')
@@ -67,21 +72,19 @@ summarised
 ```
 
 ```{r}
-read_csv_and_add_age <- function(age){
+'read_csv_and_add_age <- function(age){
   
   data = read_csv(paste0(age,".csv"),col_names=F)
   data$age = age
   return(data)
 }
 ages = unique(data$age)
-age_data = bind_rows(lapply(ages,read_csv_and_add_age)) %>% filter(X2>0)
-age_data$week = round(age_data$X1)
-age_data = age_data %>% mutate(year = case_when(week<0 ~ 2020, week>52 ~ 2022, TRUE ~2021))
-age_data = age_data %>% mutate(week = case_when(week<0 ~ 51+week, week>52 ~ week-52, TRUE ~week))
-age_data$n_prop = age_data$X2/100
+age_data = bind_rows(lapply(ages,read_csv_and_add_age)) %>% filter(X2>0)'
+age_data = read_csv("wpd_ages.csv") %>% mutate(n_prop = percentN/100) %>% mutate(date =lubridate::dmy(date))
 age_data
 
-age_data$date = as.Date(paste(age_data$year, age_data$week, 1, sep="-"), "%Y-%U-%u")
+
+
 age_data = age_data %>% group_by(date,age) %>% summarise(n_prop=mean(n_prop))
 
 
@@ -92,8 +95,10 @@ all_dates = expand_grid(age=ages,date=as_date(ymd("2020-01-01"):ymd("2022-12-30"
 together = right_join(age_data,all_dates)%>% group_by(age) %>% arrange(date) %>% fill(n_prop,.direction="downup")
 together
 
-ggplot(together %>% filter(date>"2021-01-01"),aes(x=date,y=n_prop,color=age))+geom_line()
-together %>% filter(date>"2021-01-01")
+ggplot(together %>% filter(date>"2020-12-01"),aes(x=date,y=n_prop,color=age))+geom_line()
+
+
+together
 
 positive = together %>% mutate(N="positive", group_proportion = n_prop) %>% select(N,group_proportion,date)
 negative = together %>% mutate(N="negative", group_proportion = 1-n_prop)%>% select(N,group_proportion,date)
@@ -110,7 +115,9 @@ everything$date
 
 library(gganimate)
 
-anim_stat=ggplot(everything %>% ungroup()%>%group_by(age,date) %>% arrange(age,date,titre_rev) %>% mutate(prop_cum=cumsum(proportion))  ,aes(y=prop_cum,fill=titre_rev,x=age,group=titre))+geom_area(position="identity",alpha=1,color="gray",lwd=0.1)+theme_minimal()+scale_y_continuous(label=scales::percent)+labs(title = '{frame_time}',y="Percent testing positive for antibodies",x="Age range",fill="Antibody level\n(au/ml)",caption="Data: blood donor data processed from UKHSA vaccine surveillance report\nLevels were capped at 2500 in samples taken before 11 May 2021")+ theme(plot.title = element_text(size=15))+scale_fill_manual(values=rev(c("white","#9bcde7","#67abd8","#3487c8","#0064b6","#003f9f","#031581")),guide = guide_legend(reverse = TRUE) )
+toplot = everything %>%filter(!is.na(titre)) %>% ungroup()%>%group_by(age,date) %>% arrange(age,date,titre_rev) %>% mutate(prop_cum=cumsum(proportion))
+
+anim_stat=ggplot(toplot  ,aes(y=prop_cum,fill=titre_rev,x=age,group=titre))+geom_area(position="identity",alpha=1,color="gray",lwd=0.1)+theme_minimal()+scale_y_continuous(label=scales::percent)+labs(title = '{frame_time}',y="Percent testing positive for antibodies",x="Age range",fill="Antibody level\n(au/ml)",caption="Data: blood donor data processed from UKHSA vaccine surveillance report\nLevels were capped at 2500 in samples taken before 11 May 2021")+ theme(plot.title = element_text(size=15))+scale_fill_manual(values=rev(c("white","#9bcde7","#67abd8","#3487c8","#0064b6","#003f9f","#031581")),guide = guide_legend(reverse = TRUE) )
 
 
 
@@ -118,8 +125,8 @@ anim_stat=ggplot(everything %>% ungroup()%>%group_by(age,date) %>% arrange(age,d
 
 anim_stat
 anim = anim_stat+transition_time(date)
-a <- animate(anim, renderer = file_renderer("/Users/sandert/ooutput_movie6/"),height=500*1.5,width=800*1.5,res=180,nframes = 500)
-
+a <- animate(anim, renderer = file_renderer("./ooutput_movie6/"),height=500*1.5,width=800*1.5,res=180,nframes = 500)
+everything
 
 
 ```
