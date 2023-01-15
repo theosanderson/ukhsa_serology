@@ -8,4 +8,5 @@ These are published in graphical form in the [vaccine weekly surveillance report
 
 we can then combine these two datasets in ratios according to the anti-N level in the age group:
 ![image](https://user-images.githubusercontent.com/19732295/212571061-b5e126ed-c5a0-43d1-91b1-eadab051fcc2.png)
+
 (we digitise those data with [Web plot digitiser](https://apps.automeris.io/wpd/)
